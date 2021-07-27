@@ -1,4 +1,3 @@
-Using Kaggle API to acquire the data:
 !pip install -q --upgrade --force-reinstall --no-deps kaggle
 from google.colab import files
 files.upload()
