@@ -1,14 +1,18 @@
-!pip install -q --upgrade --force-reinstall --no-deps kaggle
-from google.colab import files
-files.upload()
+USING KAGGLE API TO ACQUIRE THE DATA
 
-! mkdir ~/.kaggle
-! cp kaggle.json ~/.kaggle/
-! chmod 600 ~/.kaggle/kaggle.json
-from kaggle.api.kaggle_api_extended import KaggleApi
-!kaggle datasets download -d wyattowalsh/basketball
-!mkdir -p Data/BasketBall
-! unzip -q basketball.zip -d Data/BasketBall
+# !pip install -q --upgrade --force-reinstall --no-deps kaggle
+# from google.colab import files
+# files.upload()
+
+# ! mkdir ~/.kaggle
+# ! cp kaggle.json ~/.kaggle/
+# ! chmod 600 ~/.kaggle/kaggle.json
+# from kaggle.api.kaggle_api_extended import KaggleApi
+# !kaggle datasets download -d wyattowalsh/basketball
+# !mkdir -p Data/BasketBall
+#! unzip -q basketball.zip -d Data/BasketBall
+
+IMPORTING LIBRARIES:
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -39,3 +43,119 @@ from plotly.subplots import make_subplots # make subplot for dual axes plot
 from scipy.stats import mode
 import statistics
 from itertools import combinations
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import log_loss, accuracy_score, classification_report
+from imblearn.over_sampling import RandomOverSampler
+
+import sqlalchemy
+from sqlalchemy import *
+import numpy as np
+import pandas as pd
+import datetime
+from tqdm.notebook import tqdm
+from yaml import safe_load
+import plotly.express as px
+from plotly.subplots import make_subplots
+from scipy.stats import mode
+import statistics
+from itertools import combinations
+
+IMPORT DATA USING SQLALCHEMY
+
+# !ls Data/BasketBall
+# #2.-Turn on database engine
+# dbEngine=sqlalchemy.create_engine('sqlite:///Data/BasketBall/basketball.sqlite') # ensure this is the correct path for the sqlite file.
+# tables =dbEngine.table_names()
+# print(tables)
+# tables_to_use = ['Draft', 'Draft_Combine', 'Game', 'Player', 'Player_Attributes', 'Player_Salary', 'Team', 'Team_Attributes', 'Team_History', 'Team_Salary']
+# #3.- Read data with pandas
+# draft, draft_combine, game, player, player_attributes, player_salaries, team, team_attr, team_history, team_salary = [pd.read_sql(f'select * from {table}',dbEngine) for table in tqdm(tables_to_use)]
+# dfs_list = [draft, draft_combine, game, player, player_attributes, player_salaries, team, team_attr, team_history, team_salary ]
+# import os
+# os.chdir("/content/drive/MyDrive/Basketball Database")
+# for df_name, df in tqdm(zip(tables_to_use, dfs_list)):
+# df.to_csv(f"Data/{df_name}.csv", index=False)
+
+IMPORTING DATA USING PANDAS
+
+tables_to_use = ['Draft', 'Draft_Combine', 'Game', 'Player', 'Player_Attributes', 'Player_Salary', 'Team', 'Team_Attributes', 'Team_History', 'Team_Salary']
+
+#3.- Read data with pandas
+draft, draft_combine, game, player, player_attributes, player_salaries, team, team_attr, team_history, team_salary = [pd.read_csv(f"../Data/{f}.csv") for f in tables_to_use]
+
+DATA EXPLORATION:
+
+draft.head(2)
+draft_combine.head(2)
+game.head(2)
+player.head(2)
+player_attributes.head(2)
+player_salaries.head(2)
+team.head(2)
+team_attr.head(2)
+team_history.head(2)
+team_salary.head(2)
+
+MISSING VALUES
+
+def missing_values_analyzer(df, df_name):
+ text = f"""
+ There are {df.isna().sum().sum()} missing values in {df_name} dataframe distributed among the following columns:{list(df.isna().sum()[df.isna().sum()!=0].index)}
+ and {df.duplicated().sum()} duplicate rows in {df_name} dataframe.
+ """
+ if df.isna().sum().sum()!=0:
+ print(text)
+ elif df.duplicated().sum()!=0:
+ print(text)
+ else:
+ pass
+ return list(df.isna().sum()[df.isna().sum()!=0].index)
+missing_values_analyzes = [missing_values_analyzer(df, df_name) for df, df_name in zip([team_history, player_salaries, draft, draft_combine, game, team, team_attr, player_attributes, team_salary, player],
+ ['Team_History', 'Player_Salary', 'Draft', 'Draft_Combine', 'Game', 'Team', 'Team_Attributes', 'Player_Attributes', 'Team_Salary', 'Player']
+ 
+ FOR DATA ANALYSIS:
+ 
+year_draft_total=draft.groupby('yearDraft', as_index=False)['idPlayer'].apply(pd.Series.nunique)
+year_draft_total.columns=['yearDraft', 'totalDraft']
+year_draft_total
+
+px.line(year_draft_total,
+ x="yearDraft", y="totalDraft",
+ title='NBA Drafting Trend from 1949 to 2020')
+
+draft_beyond_2000=draft.loc[draft.yearDraft>=2001]
+twice_drafted=draft_beyond_2000.loc[draft_beyond_2000.idPlayer.isin(draft_combine.idPlayer.unique())].groupby('yearDraft', as_index=False)['idPlayer'].apply(pd.Series.nunique)
+twice_drafted.columns=['yearDraft', 'totalDraft']
+px.line(twice_drafted,
+ x="yearDraft", y="totalDraft",
+ title='NBA Draft and Draft Combine count Trend from 2001 to 2020')
+ 
+ year_draft_comb_total=draft_combine.groupby('yearCombine', as_index=False)['idPlayer'].apply(pd.Series.nunique)
+year_draft_comb_total.columns=['yearCombine', 'totalCombine']
+px.line(year_draft_comb_total,
+ x="yearCombine", y="totalCombine",
+ title='NBA Draft Combine count Trend from 2001 to 2020')
+ 
+id_team={val[0]:val[1] for val in draft[["idTeam", "nameTeam"]].values}
+
+len(id_team), len(np.unique(list(id_team.keys())))
+
+nba_team_draft_total=draft.groupby(['idTeam'], as_index=False)['idPlayer'].apply(pd.Series.nunique).sort_values('idPlayer', ascending=False)
+nba_team_draft_total.idTeam=nba_team_draft_total.idTeam.apply(lambda x: id_team[x])
+nba_team_draft_total.columns = ['nba_team', 'total_drafted']
+nba_team_draft_total.head(10)
+
+nba_team_first_draft_year=draft.groupby("idTeam", as_index=False)[['yearDraft', 'idPlayer']].agg({'yearDraft':['min', pd.Series.nunique], 'idPlayer':[pd.Series.nunique]})
+nba_team_first_draft_year.columns = [' '.join(col).strip() for col in nba_team_first_draft_year.columns.values]
+nba_team_first_draft_year.columns = ['idTeam', 'first_draft_year', 'yearDraft', 'total_drafted_to_date']
+nba_team_first_draft_year=nba_team_first_draft_year.sort_values('first_draft_year')
+nba_team_first_draft_year.idTeam=nba_team_first_draft_year.idTeam.apply(lambda x: id_team[x])
+nba_team_first_draft_year
+
+
+
+ 
+
+
+
