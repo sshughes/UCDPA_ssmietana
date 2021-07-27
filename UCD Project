@@ -1,3 +1,11 @@
 !pip install -q --upgrade --force-reinstall --no-deps kaggle
 from google.colab import files
 files.upload()
+
+! mkdir ~/.kaggle
+! cp kaggle.json ~/.kaggle/
+! chmod 600 ~/.kaggle/kaggle.json
+from kaggle.api.kaggle_api_extended import KaggleApi
+!kaggle datasets download -d wyattowalsh/basketball
+!mkdir -p Data/BasketBall
+! unzip -q basketball.zip -d Data/BasketBall
