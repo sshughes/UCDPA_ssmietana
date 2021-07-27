@@ -116,6 +116,8 @@ missing_values_analyzes = [missing_values_analyzer(df, df_name) for df, df_name 
  
  FOR DATA ANALYSIS:
  
+ 1.1 How does the NBA drafting count evolve over time from 1949 to 2020?
+ 
 year_draft_total=draft.groupby('yearDraft', as_index=False)['idPlayer'].apply(pd.Series.nunique)
 year_draft_total.columns=['yearDraft', 'totalDraft']
 year_draft_total
@@ -137,6 +139,10 @@ px.line(year_draft_comb_total,
  x="yearCombine", y="totalCombine",
  title='NBA Draft Combine count Trend from 2001 to 2020')
  
+ 
+ 1.2 What are the top 10 NBA team that drafted most number of player from university?
+ 
+ 
 id_team={val[0]:val[1] for val in draft[["idTeam", "nameTeam"]].values}
 
 len(id_team), len(np.unique(list(id_team.keys())))
@@ -146,6 +152,9 @@ nba_team_draft_total.idTeam=nba_team_draft_total.idTeam.apply(lambda x: id_team[
 nba_team_draft_total.columns = ['nba_team', 'total_drafted']
 nba_team_draft_total.head(10)
 
+
+1.3 When did the teams first start to draft players from the universities?
+
 nba_team_first_draft_year=draft.groupby("idTeam", as_index=False)[['yearDraft', 'idPlayer']].agg({'yearDraft':['min', pd.Series.nunique], 'idPlayer':[pd.Series.nunique]})
 nba_team_first_draft_year.columns = [' '.join(col).strip() for col in nba_team_first_draft_year.columns.values]
 nba_team_first_draft_year.columns = ['idTeam', 'first_draft_year', 'yearDraft', 'total_drafted_to_date']
@@ -153,9 +162,304 @@ nba_team_first_draft_year=nba_team_first_draft_year.sort_values('first_draft_yea
 nba_team_first_draft_year.idTeam=nba_team_first_draft_year.idTeam.apply(lambda x: id_team[x])
 nba_team_first_draft_year
 
+# For each year, how many team first started drafting new players
+print("For each year, how many team first started drafting new players?")
+nba_team_first_draft_year["first_draft_year"].value_counts()
+
+nba_team_first_draft_year.drop(["first_draft_year"], axis=1).describe()
+
+# top 5 teams with the most years of drafts
+nba_team_first_draft_year.sort_values("yearDraft", ascending=False).head(5)
+
+# top 5 teams with the most numbers of drafts
+nba_team_first_draft_year.sort_values("total_drafted_to_date", ascending=False).head(5)
 
 
+1.4 Where are the players coming from? Do most of the players coming from high school, university, or from other professional basketball team?
+
+draft_player_org = draft.groupby('typeOrganizationFrom', as_index=False)['idPlayer'].apply(pd.Series.nunique)
+draft_player_org.columns = ['organization', 'player_count']
+draft_player_org
+
+px.pie(draft_player_org, values='player_count', names='organization', hole=0.3,
+ title="Drafted player organization breakdown")
+
+draft_player_org_trend = draft.groupby(['yearDraft', 'typeOrganizationFrom'], as_index=False)['idPlayer'].apply(pd.Series.nunique)
+draft_player_org_trend.columns = ['yearDraft', 'organization', 'drafted_count']
+# draft_player_org_trend
+px.line(draft_player_org_trend.dropna(),
+ x="yearDraft", y="drafted_count", color="organization",
+ title='NBA drafting trend by player source organization type from 1949 to 2020 (click legend to filter)')
  
+ 2.1 From 1949 to 2020, how did the total number of participated team count changes and how did the total game count changes along with it overall?
 
 
+team_and_game_count=game.groupby("SEASON", as_index=False)[['TEAM_ID_HOME', 'GAME_ID']].agg({'TEAM_ID_HOME':[pd.Series.nunique],
+ 'GAME_ID':[pd.Series.nunique]})
+team_and_game_count.columns=['season', 'total_team_count', 'total_game_count']
+# # create visualization with two y axis for team and game total from 1946 to 2020
+two_y_axis_plot = make_subplots(specs=[[{"secondary_y": True}]])
+team_count_trace = px.bar(team_and_game_count, x="season", y="total_team_count")
+game_count_trace = px.line(team_and_game_count, x="season", y="total_game_count")
+team_count_trace.update_traces(name="team totals", showlegend = True, opacity=0.6)
+game_count_trace.update_traces(name="game totals", showlegend = True, line_color="red")
+two_y_axis_plot.add_trace(team_count_trace.data[0], secondary_y=False)
+two_y_axis_plot.add_trace(game_count_trace.data[0], secondary_y=True)
+two_y_axis_plot.update_yaxes(title_text="team totals", secondary_y=False)
+two_y_axis_plot.update_yaxes(title_text="game totals", secondary_y=True)
+two_y_axis_plot.update_layout(title_text="1946 to 2020: NBA total team and total game play trend (click legend text to filter)")
+
+2.2 From 1949 to 2020, how did home game won percentage among all the games change over time?
+
+game['home_win_count']=game['WL_HOME'].apply(lambda x: 1 if x=='W' else 0)
+home_game_stats = game.groupby('SEASON', as_index=False)['home_win_count'].sum()
+home_game_stats
+
+# find home game won percentage for each season overall
+home_game_stats["home_won_percentage"] = round(100 * home_game_stats["home_win_count"] / team_and_game_count["total_game_count"], 2)
+px.line(home_game_stats, y="home_won_percentage", x="SEASON", title="1946-2020: Overall home game won percentage")
+
+game['away_win_count']=game['WL_AWAY'].apply(lambda x: 1 if x=='W' else 0)
+team_level_home_game_stats=game.groupby(['SEASON', 'TEAM_ID_HOME'], as_index=False)[['TEAM_NAME_HOME', 'home_win_count', 'TEAM_ID_HOME']].agg({'TEAM_NAME_HOME':statistics.mode, 'home_win_count':'sum', 'TEAM_ID_HOME':['count', statistics.mode]}, )
+# team_level_home_game_stats.TEAM_NAME_HOME = team_level_home_game_stats.TEAM_NAME_HOME.apply(lambda x: x[0][0])
+team_level_home_game_stats.columns=['season', 'team_name', 'win_count', 'team_game_count', 'team_id']
+team_level_home_game_stats['game_location']='home'
+team_level_home_game_stats
+
+team_level_away_game_stats=game.groupby(['SEASON', 'TEAM_ID_AWAY'], as_index=False)[['TEAM_NAME_AWAY', 'away_win_count', 'TEAM_ID_AWAY']].agg({'TEAM_NAME_AWAY':statistics.mode, 'away_win_count':'sum', 'TEAM_ID_AWAY':['count', statistics.mode]}, )
+# team_level_home_game_stats.TEAM_NAME_HOME = team_level_home_game_stats.TEAM_NAME_HOME.apply(lambda x: x[0][0])
+team_level_away_game_stats.columns=['season', 'team_name', 'win_count', 'team_game_count', 'team_id']
+team_level_away_game_stats['game_location']='away'
+team_level_away_game_stats
+
+team_level_game_stats=pd.concat([team_level_home_game_stats, team_level_away_game_stats], axis=0)
+team_level_game_stats["win_percentage"] = round(
+100 * team_level_game_stats["win_count"] / team_level_game_stats["team_game_count"], 2)
+team_level_game_stats
+
+# let's compare the home game won percentage and away game won percentage for each year by team
+px.scatter(team_level_game_stats, x="season", y="win_percentage",
+color="game_location", title="1946-2020: team level game won percentage by game location")
+ 
+ # calculate median win percentage for each year by game location
+cols_to_drop = ["team_id", "team_name", "win_count", "team_game_count"]
+median_win_pct = team_level_game_stats.drop(cols_to_drop, axis=1).groupby(["season", "game_location"]).median().reset_index()
+median_win_pct
+
+px.line(median_win_pct, x="season", y="win_percentage",
+color="game_location", title="1946-2020: median of the team level game won percentage by game location")
+ 
+team_level_game_stats.query("game_location == 'away' & win_percentage > 50").sort_values("win_percentage") 
+ 
+2.3 How does the free throw percentage (FT%) changes over time from 1949 to 2020? For each season, which team had the best FT%?
+
+
+team_level_away_ft_game_stats=game.groupby(['SEASON', 'TEAM_ID_AWAY'], as_index=False)[['TEAM_NAME_AWAY', 'FT_PCT_AWAY', 'TEAM_ID_AWAY']].agg({'TEAM_NAME_AWAY':statistics.mode, 'FT_PCT_AWAY':'mean', 'TEAM_ID_AWAY':['count', statistics.mode]}, )
+# team_level_home_game_stats.TEAM_NAME_HOME = team_level_home_game_stats.TEAM_NAME_HOME.apply(lambda x: x[0][0])
+team_level_away_ft_game_stats.columns=['season', 'team_name', 'free_throw_percentage', 'team_game_count', 'team_id']
+team_level_away_ft_game_stats['game_location']='away'
+# team_level_away_game_stats
+team_level_home_ft_game_stats=game.groupby(['SEASON', 'TEAM_ID_HOME'], as_index=False)[['TEAM_NAME_HOME', 'FT_PCT_HOME', 'TEAM_ID_HOME']].agg({'TEAM_NAME_HOME':statistics.mode, 'FT_PCT_HOME':'mean', 'TEAM_ID_HOME':['count', statistics.mode]}, )
+# team_level_home_game_stats.TEAM_NAME_HOME = team_level_home_game_stats.TEAM_NAME_HOME.apply(lambda x: x[0][0])
+team_level_home_ft_game_stats.columns=['season', 'team_name', 'free_throw_percentage', 'team_game_count', 'team_id']
+team_level_home_ft_game_stats['game_location']='home'
+# team_level_home_game_stats
+team_level_ft_game_stats=pd.concat([team_level_home_ft_game_stats, team_level_away_ft_game_stats], axis=0)
+team_level_ft_game_stats
+
+# calculate median free throw percentage for each year by game location
+cols_to_drop = ["team_id", "team_name", "team_game_count"]
+median_ft_pct = team_level_ft_game_stats.drop(cols_to_drop, axis=1).groupby(["season", "game_location"]).median().reset_index()
+px.line(median_ft_pct, x="season", y="free_throw_percentage",
+color="game_location", title="1946-2020: median of the team level free throw percentage by game location")
+ 
+ 
+2.4 How does the three point field goal percentage (3P%) changes over time from 1949 to 2020? For each season, which team had the best 3P%?
+
+team_level_away_3pm_game_stats=game.groupby(['SEASON', 'TEAM_ID_AWAY'], as_index=False)[['TEAM_NAME_AWAY', 'FG3_PCT_AWAY', 'TEAM_ID_AWAY']].agg({'TEAM_NAME_AWAY':statistics.mode, 'FG3_PCT_AWAY':'mean', 'TEAM_ID_AWAY':['count', statistics.mode]}, )
+# team_level_home_game_stats.TEAM_NAME_HOME = team_level_home_game_stats.TEAM_NAME_HOME.apply(lambda x: x[0][0])
+team_level_away_3pm_game_stats.columns=['season', 'team_name', 'three_point_percentage', 'team_game_count', 'team_id']
+team_level_away_3pm_game_stats['game_location']='away'
+# team_level_away_game_stats
+
+team_level_home_3pm_game_stats=game.groupby(['SEASON', 'TEAM_ID_HOME'], as_index=False)[['TEAM_NAME_HOME', 'FG3_PCT_HOME', 'TEAM_ID_HOME']].agg({'TEAM_NAME_HOME':statistics.mode, 'FG3_PCT_HOME':'mean', 'TEAM_ID_HOME':['count', statistics.mode]}, )
+# team_level_home_game_stats.TEAM_NAME_HOME = team_level_home_game_stats.TEAM_NAME_HOME.apply(lambda x: x[0][0])
+team_level_home_3pm_game_stats.columns=['season', 'team_name', 'three_point_percentage', 'team_game_count', 'team_id']
+team_level_home_3pm_game_stats['game_location']='home'
+# team_level_home_game_stats
+team_level_3pm_game_stats=pd.concat([team_level_home_3pm_game_stats, team_level_away_3pm_game_stats], axis=0)
+team_level_3pm_game_stats
+
+# how many three_point_percentage rows have NA values because no three point data
+team_level_3pm_game_stats.isna()["three_point_percentage"].sum()
+
+# drop na and reset index
+team_level_three_point_stats = team_level_3pm_game_stats.dropna().query("three_point_percentage < 1").reset_index(drop=True)
+# calculate median free throw percentage for each year by game location
+cols_to_drop = ["team_id", "team_name", "team_game_count"]
+median_3p_pct = team_level_three_point_stats.drop(cols_to_drop, axis=1).groupby(["season", "game_location"]).median().reset_index()
+
+px.line(median_3p_pct.query("season > 1986"), x="season", y="three_point_percentage",
+ color="game_location", title="1946-2020: median of the team level three points percentage by game location")
+
+
+2.5 How do the pace, ratings and four factor statistics evolve per team from 1949 to 2020?
+
+for col in ['FGA_AWAY', 'FG3A_AWAY', 'FTA_AWAY', 'OREB_AWAY', 'TOV_AWAY', 'FGA_HOME', 'FG3A_HOME', 'FTA_HOME', 'OREB_HOME', 'TOV_HOME', 'MIN_AWAY', 'MIN_HOME', 'PTS_HOME', 'PTS_AWAY', 'FGM_HOME', 'FG3M_HOME', 'FGM_AWAY', 'FG3M_AWAY', 'DREB_HOME', 'DREB_AWAY', 'FTM_HOM
+ game[col]=game[col].astype(float)
+
+game['poss_away']=game['FGA_AWAY']+game['FG3A_AWAY']+ 0.44*game['FTA_AWAY']-game['OREB_AWAY']+game['TOV_AWAY']
+game['poss_home']=game['FGA_HOME']+game['FG3A_HOME']+ 0.44*game['FTA_HOME']-game['OREB_HOME']+game['TOV_HOME']
+game['pace_away']=game['poss_away']/game['MIN_AWAY']
+game['pace_home']=game['poss_home']/game['MIN_HOME']
+game['ORtg']=game['PTS_HOME']/game['poss_home']
+game['DRtg']=game['PTS_AWAY']/game['poss_away']
+
+game['eFG% Offense'] = (game['FGM_HOME']+1.5*game['FG3M_HOME'])/(game['FGA_HOME']+game['FG3A_HOME'])
+game['eFG% Defense'] = (game['FGM_AWAY']+1.5*game['FG3M_AWAY'])/(game['FGA_AWAY']+game['FG3A_AWAY'])
+game['TO Ratio Offense'] = game['TOV_HOME']/game['poss_home']
+game['TO Ratio Defense'] = game['TOV_AWAY']/game['poss_away']
+game['REB% Offense'] = game['OREB_HOME']/(game['OREB_HOME']+game['DREB_AWAY'])
+game['REB% Defense'] = game['DREB_HOME']/(game['OREB_AWAY']+game['DREB_HOME'])
+game['FT Rate Offense'] = game['FTM_HOME']/(game['FGM_HOME']+game['FG3M_HOME'])
+game['FT Rate Defense'] = game['FTM_AWAY']/(game['FGM_AWAY']+game['FG3M_AWAY'])
+
+game.SEASON=game.SEASON.astype(int)
+
+px.scatter(game.groupby('TEAM_NAME_HOME', as_index=False)[['pace_home', 'pace_away']].mean(), x='pace_home',
+y='pace_away', text='TEAM_NAME_HOME', title='PACE for all teams from 1946 to 2020')
+
+px.scatter(game.query('SEASON==2020').groupby('TEAM_NAME_HOME', as_index=False)[['pace_home', 'pace_away']].mean(), x='pace_home',
+ y='pace_away', text='TEAM_NAME_HOME', title='PACE for all teams 2020 SEASON')
+
+px.scatter(game.groupby('TEAM_NAME_HOME', as_index=False)[['ORtg', 'DRtg']].mean(), x='ORtg',
+ y='DRtg', text='TEAM_NAME_HOME', title='Ratings for all teams from 1946 to 2020')
+
+px.scatter(game.query('SEASON==2020').groupby('TEAM_NAME_HOME', as_index=False)[['ORtg', 'DRtg']].mean(), x='ORtg',
+ y='DRtg', text='TEAM_NAME_HOME', title='Ratings for all teams in 2020')
+
+game_4_tms= game.loc[game.TEAM_ABBREVIATION_HOME.isin(['BOS', 'CLE', 'GSW', 'HOU'])]
+game_4_tms_4_fctors=game_4_tms.groupby(['TEAM_NAME_HOME'], as_index=False)[['eFG% Offense', 'TO Ratio Offense', 'REB% Offense', 'FT Rate Offense']].mean()
+
+for col in ['eFG% Offense', 'TO Ratio Offense', 'REB% Offense', 'FT Rate Offense']:
+ game_4_tms_4_fctors[col]=game_4_tms_4_fctors[col]-game_4_tms_4_fctors[col].mean()
+game_4_tms_4_fctors
+
+game_4_tms_4_fctors=pd.melt(game_4_tms_4_fctors, id_vars='TEAM_NAME_HOME', value_vars=['eFG% Offense', 'TO Ratio Offense', 'REB% Offense', 'FT Rate Offense'], value_name='Value', var_name='Factor')
+game_4_tms_4_fctors
+
+px.bar(game_4_tms_4_fctors, x='Factor', y='Value', color='TEAM_NAME_HOME', barmode='group',
+ title='Offensive four factors average from 1946 to 2020'
+ 
+ game_4_tms= game.loc[game.TEAM_ABBREVIATION_HOME.isin(['BOS', 'CLE', 'GSW', 'HOU'])]
+game_4_tms_4_fctors=game_4_tms.groupby(['TEAM_NAME_HOME'], as_index=False)[['eFG% Defense', 'TO Ratio Defense', 'REB% Defense', 'FT Rate Defense']].mean()
+for col in ['eFG% Defense', 'TO Ratio Defense', 'REB% Defense', 'FT Rate Defense']:
+ game_4_tms_4_fctors[col]=game_4_tms_4_fctors[col]-game_4_tms_4_fctors[col].mean()
+game_4_tms_4_fctors=pd.melt(game_4_tms_4_fctors, id_vars='TEAM_NAME_HOME', value_vars=['eFG% Defense', 'TO Ratio Defense', 'REB% Defense', 'FT Rate Defense'], value_name='Value', var_name='Factor')
+px.bar(game_4_tms_4_fctors, x='Factor', y='Value', color='TEAM_NAME_HOME', barmode='group',
+ title='Defensive four factors average from 1946 to 2020'
+ 
+ 3. Player Background and Salary Analysis
+3.1 Who are the top 10 NBA players based on 2020-2021 season salary?
+
+print(player_attributes.columns)
+
+player_player_salaries=pd.merge(player, player_salaries, left_on='full_name', right_on='namePlayer')
+player_player_salaries_and_attr = pd.merge(player_player_salaries, player_attributes, left_on='id', right_on='ID')
+
+player_player_salaries_and_attr.BIRTHDATE = pd.to_datetime(player_player_salaries_and_attr.BIRTHDATE)
+
+player_player_salaries_and_attr['age']=2021-player_player_salaries_and_attr.BIRTHDATE.apply(lambda x: int(datetime.datetime.strftime(x, '%Y')))
+
+player_player_salaries_and_attr['year_in_nba'] = datetime.datetime.now().year - player_player_salaries_and_attr['DRAFT_YEAR'].apply(lambda x: x.replace('Undrafted', str(datetime.datetime.now().year))).apply(int)
+
+player_player_salaries_and_attr['salary_in_millions'] = round(player_player_salaries_and_attr['value']/1000000, 0)
+
+player_player_salaries_and_attr_20_21=player_player_salaries_and_attr.query('slugSeason=="2020-21"')
+
+player_player_salaries_and_attr_20_21[['namePlayer', 'nameTeam', 'age', 'DRAFT_YEAR', 'year_in_nba', 'POSITION', 'salary_in_millions']].sort_values('salary_in_millions', ascending=False).head(10)
+
+
+3.2 What are the game play stats for the top 10 earning NBA players based on the data available in this table?
+
+player_player_salaries_and_attr_20_21[['namePlayer', 'nameTeam', 'DRAFT_YEAR', 'POSITION', 'PTS', 'AST', 'REB', 'salary_in_millions']].sort_values('salary_in_millions', ascending=False).head(10)
+
+
+4. Team Background Data Analysis
+4.1 What are the top 10 paying teams in 2020-21 season based on the average salary?
+
+team_top_10_paying=player_player_salaries_and_attr_20_21.groupby('nameTeam', as_index=False)['salary_in_millions'].mean().sort_values('salary_in_millions', ascending=False).head(10)
+team_top_10_paying['salary_text']=team_top_10_paying['salary_in_millions'].apply(lambda x: round(x, 1))
+fig = px.bar(team_top_10_paying, x="nameTeam", y="salary_in_millions",
+ text="salary_text", title="top 10 high paying NBA team by average salary")
+fig.show()
+# team_top_10_paying
+
+
+5. What is the winning probability of a favourite team for a given pair of teams knowing preceeding scores and results?
+
+new_teams=game.query('SEASON==2019').TEAM_ABBREVIATION_HOME.unique()
+
+pairs=[x for x in combinations(new_teams, 2)]
+
+team_abbr_name=game.query('SEASON==2019').groupby("TEAM_ABBREVIATION_HOME")["TEAM_NAME_HOME"].agg(statistics.mode).to_dict()
+
+def forecaster(team, opponent):
+ print(f"Forecast results of {team_abbr_name[team]} vs {team_abbr_name[opponent]}\n")
+ data=game.query(f'TEAM_ABBREVIATION_HOME=="{team}" & TEAM_ABBREVIATION_AWAY=="{opponent}"')[['SEASON', 'TEAM_NAME_HOME', 'TEAM_NAME_AWAY', 'PTS_HOME', 'PTS_AWAY', 'WL_HOME']]
+ data["WL_HOME"]=data["WL_HOME"].replace({"W":1, "L":0})
+ data=data.reset_index(drop=True)
+ print(f"The dataset got {len(data)} rows. Using {int(0.8*len(data))} for train and {int(0.2*len(data))} for test\n")
+ pts_away, pts_home, wl_home=data[["SEASON", "PTS_AWAY"]].rename(columns={"SEASON":"ds", "PTS_AWAY":"y"}), data[["SEASON", "PTS_HOME"]].rename(columns={"SEASON":"ds", "PTS_HOME":"y"}), data[["SEASON", "PTS_AWAY", "PTS_HOME", "WL_HOME"]]
+
+ train_pts_away, test_pts_away=pts_away[:int(0.8*len(data))], pts_away[int(0.8*len(data)):]
+ train_pts_home, test_pts_home=pts_home[:int(0.8*len(data))], pts_home[int(0.8*len(data)):]
+ xtrain_wl_home, ytrain_wl_home, xtest_wl_home, ytest_wl_home=wl_home[:int(0.8*len(data))][["SEASON", "PTS_HOME", "PTS_AWAY"]], wl_home[:int(0.8*len(data))]["WL_HOME"], wl_home[int(0.8*len(data)):][["SEASON", "PTS_HOME", "PTS_AWAY"]], wl_home[int(0.8*len(data)):]["WL
+ m_pts_away = Prophet(weekly_seasonality=False, daily_seasonality=False, n_changepoints=4)
+ m_pts_away.fit(train_pts_away)
+ forecast_pts_away = m_pts_away.predict(test_pts_away)
+ test_pts_away['prediction']=forecast_pts_away['yhat'].values
+ m_pts_home = Prophet(weekly_seasonality=False, daily_seasonality=False, n_changepoints=4)
+ m_pts_home.fit(train_pts_home)
+ forecast_pts_home = m_pts_home.predict(test_pts_home)
+ test_pts_home['prediction']=forecast_pts_home['yhat'].values
+ test_pts_home=test_pts_home.rename({"ds":"SEASON", "prediction":"PTS_HOME"}, axis=1)
+ test_pts_away=test_pts_away.rename({"ds":"SEASON", "prediction":"PTS_AWAY"}, axis=1)
+ test_wl_home=pd.concat([test_pts_home[["SEASON", "PTS_HOME"]], test_pts_away["PTS_AWAY"]], axis=1)
+ lr = LogisticRegression()
+ lr.fit(xtrain_wl_home[xtrain_wl_home.columns[1:]], ytrain_wl_home)
+ forecast, probas = lr.predict(test_wl_home[test_wl_home.columns[1:]]), lr.predict_proba(test_wl_home[test_wl_home.columns[1:]])
+ test_wl_home=wl_home[int(0.8*len(data)):]
+ test_wl_home['WL_HOME_pred']=forecast
+ test_wl_home['WL_HOME_pred_proba']=[round(x[1], 4) for x in probas]
+ print(f"The accuracy of the forecast on the test set is {round(accuracy_score(test_wl_home['WL_HOME'], test_wl_home['WL_HOME_pred'])*100, 1)} percent")
+ return test_wl_home, data, m_pts_home, m_pts_away, lr
+ # pd.crosstab(test_wl_home['WL_HOME_pred'], test_wl_home['WL_HOME'])
+
+def train_model():
+ team_abbr=input("Please enter a home team abbreviation name: \n")
+ print('\n')
+ opponent_abbr=input("Please enter an opponent team abbreviation name:\n")
+ print("\n")
+ pair = [ x for x in pairs if ((x[0]==team_abbr) and (x[1]==opponent_abbr))][0]
+ team=pair[0]
+ opponent=pair[1]
+ pred, data, m_pts_home, m_pts_away, lr = forecaster(team, opponent)
+ return team, opponent, pred, data, m_pts_home, m_pts_away, lr
+
+team, opponent, pred, data, m_pts_home, m_pts_away, lr = train_model()
+
+print(classification_report(pred['WL_HOME'], pred['WL_HOME_pred']))
+
+def forecast_future_season(team, opponent, season):
+ pts_home_pred = m_pts_home.predict(pd.DataFrame({"ds":[season], "y":[0]}))['yhat'].values[0]
+ pts_away_pred = m_pts_away.predict(pd.DataFrame({"ds":[season], "y":[0]}))['yhat'].values[0]
+ win_or_loss_home = lr.predict(np.array([pts_home_pred, pts_away_pred]).reshape(1, -1))[0]
+ proba_win_home = round(lr.predict_proba(np.array([pts_home_pred, pts_away_pred]).reshape(1, -1))[0][1], 4)
+
+ if proba_win_home>0.5:
+ print(f"{team_abbr_name[team]} has a likelihood of {proba_win_home} winning over {team_abbr_name[opponent]} during {season} season with a score of {int(pts_home_pred)} vs {int(pts_away_pred)}.")
+ else:
+ print(f"{team_abbr_name[opponent]} has a likelihood of {1-proba_win_home} winning over {team_abbr_name[team]} during {season} season with a score of {int(pts_home_pred)} vs {int(pts_away_pred)}.")
+ return pts_home_pred, pts_away_pred, win_or_loss_home, proba_win_home
 
